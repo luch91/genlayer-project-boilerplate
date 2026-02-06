@@ -10,7 +10,7 @@ import {
 import { localnet } from "genlayer-js/chains";
 
 export default async function main(client: GenLayerClient<any>) {
-  const filePath = path.resolve(process.cwd(), "contracts/football_bets.py");
+  const filePath = path.resolve(process.cwd(), "contracts/truth_post.py");
 
   try {
     const contractCode = new Uint8Array(readFileSync(filePath));
@@ -44,6 +44,6 @@ export default async function main(client: GenLayerClient<any>) {
 
     console.log(`Contract deployed at address: ${deployedContractAddress}`);
   } catch (error) {
-    throw new Error(`Error during deployment:, ${error}`);
+    throw new Error(`Error during deployment: ${error}`);
   }
 }

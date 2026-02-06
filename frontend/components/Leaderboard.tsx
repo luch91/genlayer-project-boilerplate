@@ -1,12 +1,12 @@
 "use client";
 
 import { Trophy, Medal, Award, Loader2, AlertCircle } from "lucide-react";
-import { useLeaderboard, useFootballBetsContract } from "@/lib/hooks/useFootballBets";
+import { useLeaderboard, useTruthPostContract } from "@/lib/hooks/useTruthPost";
 import { useWallet } from "@/lib/genlayer/wallet";
 import { AddressDisplay } from "./AddressDisplay";
 
 export function Leaderboard() {
-  const contract = useFootballBetsContract();
+  const contract = useTruthPostContract();
   const { data: leaderboard, isLoading, isError } = useLeaderboard();
   const { address } = useWallet();
 
@@ -79,7 +79,7 @@ export function Leaderboard() {
       </h2>
 
       <div className="space-y-2">
-        {leaderboard.map((entry, index) => {
+        {leaderboard.slice(0, 10).map((entry, index) => {
           const isCurrentUser = address?.toLowerCase() === entry.address?.toLowerCase();
           const rank = index + 1;
 
@@ -130,9 +130,9 @@ export function Leaderboard() {
               <div className="flex-shrink-0">
                 <div className="flex items-baseline gap-1">
                   <span className="text-lg font-bold text-accent">
-                    {entry.points}
+                    {entry.reputation}
                   </span>
-                  <span className="text-xs text-muted-foreground">pts</span>
+                  <span className="text-xs text-muted-foreground">rep</span>
                 </div>
               </div>
             </div>

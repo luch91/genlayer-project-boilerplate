@@ -1,7 +1,7 @@
 "use client";
 
 import { Navbar } from "@/components/Navbar";
-import { BetsTable } from "@/components/BetsTable";
+import { ClaimsTable } from "@/components/ClaimsTable";
 import { Leaderboard } from "@/components/Leaderboard";
 
 export default function HomePage() {
@@ -16,20 +16,20 @@ export default function HomePage() {
           {/* Hero Section */}
           <div className="text-center mb-8 animate-fade-in">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">
-              Football Prediction Betting
+              TruthPost
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto">
-              AI-powered football match predictions on GenLayer blockchain.
+              Decentralized fact-checking powered by AI on GenLayer.
               <br />
-              Create bets, make predictions, and compete for points.
+              Submit claims, verify facts, and earn reputation.
             </p>
           </div>
 
           {/* Main Grid Layout - 2/1 columns on desktop, stacked on mobile */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
-            {/* Left Column - Bets Table (67% on desktop) */}
+            {/* Left Column - Claims (67% on desktop) */}
             <div className="lg:col-span-8 animate-slide-up">
-              <BetsTable />
+              <ClaimsTable />
             </div>
 
             {/* Right Column - Leaderboard (33% on desktop) */}
@@ -43,21 +43,21 @@ export default function HomePage() {
             <h2 className="text-2xl font-bold mb-4">How it Works</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="space-y-2">
-                <div className="text-accent font-bold text-lg">1. Create a Bet</div>
+                <div className="text-accent font-bold text-lg">1. Submit a Claim</div>
                 <p className="text-sm text-muted-foreground">
-                  Connect your wallet and create a football match prediction. Choose the teams, date, and your predicted winner.
+                  Connect your wallet and submit any factual claim with a source URL for the AI to verify against.
                 </p>
               </div>
               <div className="space-y-2">
-                <div className="text-accent font-bold text-lg">2. Wait for Resolution</div>
+                <div className="text-accent font-bold text-lg">2. AI Fact-Checks It</div>
                 <p className="text-sm text-muted-foreground">
-                  After the match, the bet creator resolves the bet. GenLayer's AI verifies the actual match result.
+                  GenLayer fetches the source URL and uses AI to analyze whether the claim is true, false, or partially true.
                 </p>
               </div>
               <div className="space-y-2">
-                <div className="text-accent font-bold text-lg">3. Earn Points</div>
+                <div className="text-accent font-bold text-lg">3. Validators Agree</div>
                 <p className="text-sm text-muted-foreground">
-                  Correct predictions earn you points. Climb the leaderboard and prove your football knowledge!
+                  Multiple validators independently verify through Optimistic Democracy consensus and the Equivalence Principle.
                 </p>
               </div>
             </div>
