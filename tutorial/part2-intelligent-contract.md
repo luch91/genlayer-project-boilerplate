@@ -1,42 +1,41 @@
-# Zero to GenLayer: Build a Decentralized Fact-Checker with AI
+# Zero to GenLayer: Build a Decentralized AI Fact-Checker from Scratch
 
 ## Part 2 — Writing Your First Intelligent Contract
 
-*In this part, you'll write the TruthPost contract in Python — a smart contract that fetches data from the web, uses AI to analyze it, and reaches consensus through GenLayer's Equivalence Principle.*
+*In this part, you'll write the TruthPost contract in Python — a smart contract that reaches out to the internet, asks an AI to analyze what it finds, and uses GenLayer's consensus mechanism to agree on the result. In 95 lines of code.*
 
 ---
 
-### What We're Building
+In Part 1, we talked about what makes GenLayer different. Now we're going to prove it — by writing a smart contract that would be impossible on any other blockchain.
 
 Our TruthPost contract will:
 
-1. Let users **submit claims** to be fact-checked (e.g., *"The Great Wall of China is visible from space"*)
-2. **Fetch real web sources** to verify the claim
-3. Use an **LLM to analyze** the sources and produce a verdict
-4. Use the **Equivalence Principle** so all validators agree on the verdict
-5. Track **reputation points** for users who submit claims that get verified
+1. Let users **submit factual claims** (e.g., *"The Great Wall of China is visible from space"*)
+2. **Fetch a real web page** to find evidence
+3. **Ask an LLM** to analyze the evidence and return a verdict
+4. Use the **Equivalence Principle** so multiple validators independently agree
+5. **Track reputation** for users who contribute claims
 
-By the end of this part, you'll have a working intelligent contract that does things **impossible on any other blockchain**.
+Let's build it.
 
 ---
 
-### Intelligent Contracts 101
+## Anatomy of an Intelligent Contract
 
-Before we write code, let's understand the anatomy of a GenLayer contract:
+Before we write TruthPost, here's the minimal structure of a GenLayer contract:
 
 ```python
-# Every contract starts with this import
 from genlayer import *
 
 class MyContract(gl.Contract):
-    # State variables — persisted on-chain
+    # State variables — persisted on-chain between calls
     my_data: TreeMap[Address, str]
 
-    # Constructor — called once at deployment
+    # Constructor — runs once at deployment
     def __init__(self):
         pass
 
-    # Read-only method — anyone can call, no gas cost
+    # Read-only method — free to call, can't change state
     @gl.public.view
     def get_data(self) -> str:
         return "hello"
@@ -47,18 +46,18 @@ class MyContract(gl.Contract):
         self.my_data[gl.message.sender_address] = value
 ```
 
-**Key differences from Solidity:**
-- Contracts are **Python classes** extending `gl.Contract`
-- Only **one contract class** per file
-- Storage uses **GenLayer types** (`TreeMap`, `DynArray`) instead of Python `dict`/`list`
-- Methods are marked with **decorators**: `@gl.public.view` (read) or `@gl.public.write` (write)
-- You can access the caller's address with `gl.message.sender_address`
+If you know Python, this should already feel familiar. A few things to note:
+
+- Contracts are **Python classes** that extend `gl.Contract`
+- Storage uses **GenLayer-specific types** (`TreeMap`, `DynArray`) instead of regular Python `dict` and `list` — these are optimized for blockchain storage
+- Methods are tagged with **decorators**: `@gl.public.view` for reads, `@gl.public.write` for state changes
+- `gl.message.sender_address` gives you the caller's wallet address (like Solidity's `msg.sender`)
 
 ---
 
-### Step 1: Define the Data Model
+## Step 1: Define the Data Model
 
-Create the file `contracts/truth_post.py` and let's start with our data structures:
+Create the file `contracts/truth_post.py` and start with the data structure for a claim:
 
 ```python
 # { "Depends": "py-genlayer:test" }
@@ -72,58 +71,56 @@ from genlayer import *
 @dataclass
 class Claim:
     id: str                  # Unique identifier
-    text: str                # The claim to fact-check
+    text: str                # The claim to verify
     verdict: str             # "true", "false", "partially_true", or "pending"
-    explanation: str         # AI-generated explanation
+    explanation: str         # AI-generated explanation of the verdict
     source_url: str          # URL used for verification
-    submitter: str           # Address of who submitted
-    has_been_checked: bool   # Whether fact-check has run
+    submitter: str           # Wallet address of who submitted it
+    has_been_checked: bool   # Whether the AI has analyzed it yet
 ```
 
-Let's break this down:
+Two things worth explaining:
 
-- **`@allow_storage`** — This decorator tells GenLayer this dataclass can be stored on-chain. Without it, you can't persist custom objects.
-- **`@dataclass`** — Standard Python dataclass for structured data.
-- Each `Claim` tracks the original claim text, the AI's verdict, and metadata about the fact-check.
+**`@allow_storage`** tells GenLayer this dataclass can be persisted on-chain. Without it, you can't store custom objects in contract state. Regular Python objects only live in memory during a single method call — `@allow_storage` objects survive between transactions.
 
-> **Storage types in GenLayer:**
->
-> | Python Type | GenLayer Type | Why |
-> |-------------|---------------|-----|
-> | `dict` | `TreeMap[K, V]` | Blockchain-optimized key-value storage |
-> | `list` | `DynArray[T]` | Blockchain-optimized dynamic arrays |
-> | `int` | `u256`, `i64`, etc. | Fixed-size integers for deterministic behavior |
->
-> You **must** use GenLayer types for state variables. Regular Python types work fine for local variables within methods.
+**Why GenLayer types?** Blockchain state must be serializable and gas-efficient. Here's the mapping:
+
+| Python | GenLayer | Why |
+|--------|----------|-----|
+| `dict` | `TreeMap[K, V]` | Ordered, gas-efficient key-value storage |
+| `list` | `DynArray[T]` | Dynamic array optimized for on-chain use |
+| `int` | `u256`, `i64`, etc. | Fixed-size integers for deterministic arithmetic |
+
+Use GenLayer types for state variables. Regular Python types are fine for local variables inside methods.
 
 ---
 
-### Step 2: Set Up the Contract Class
+## Step 2: Set Up the Contract
 
-Now let's define the contract with its state variables:
+Now define the contract class with its state:
 
 ```python
 class TruthPost(gl.Contract):
     claims: TreeMap[str, Claim]          # claim_id -> Claim
-    reputation: TreeMap[Address, u256]   # user address -> reputation points
-    claim_count: u256                    # total claims submitted
+    reputation: TreeMap[Address, u256]   # wallet address -> reputation score
+    claim_count: u256                    # auto-incrementing counter
 
     def __init__(self):
         self.claim_count = 0
 ```
 
-Our contract stores:
-- **`claims`** — A map from claim IDs to `Claim` objects
-- **`reputation`** — A map from user addresses to their reputation score
-- **`claim_count`** — A simple counter
+Three state variables:
+- **`claims`** — every submitted claim, keyed by ID
+- **`reputation`** — how many claims each user has contributed
+- **`claim_count`** — used to generate unique IDs
 
-The `__init__` method is the constructor, called once when the contract is deployed.
+The `__init__` constructor runs once when the contract is deployed. After that, state persists forever on-chain.
 
 ---
 
-### Step 3: Submit a Claim (Write Method)
+## Step 3: Submitting Claims
 
-Let's add the method for users to submit claims for fact-checking:
+Let's let users submit claims for fact-checking:
 
 ```python
     @gl.public.write
@@ -134,7 +131,7 @@ Let's add the method for users to submit claims for fact-checking:
         self.claim_count += 1
         claim_id = f"claim_{self.claim_count}"
 
-        # Create the claim in "pending" state
+        # Store with verdict="pending" — AI hasn't checked it yet
         claim = Claim(
             id=claim_id,
             text=claim_text,
@@ -148,28 +145,25 @@ Let's add the method for users to submit claims for fact-checking:
         self.claims[claim_id] = claim
 ```
 
-**What's happening:**
-- `@gl.public.write` means this method modifies blockchain state (costs gas)
-- `gl.message.sender_address` gives us the caller's address (like `msg.sender` in Solidity)
-- We create a `Claim` with verdict `"pending"` — the AI hasn't checked it yet
-- The claim is stored in our `TreeMap`
+Nothing exotic here. A user provides the claim text and a URL for verification. We store it with `verdict="pending"` — the AI analysis happens separately, in the next method.
 
 ---
 
-### Step 4: The Magic — AI-Powered Fact-Checking
+## Step 4: The Core — AI-Powered Fact-Checking
 
-This is where GenLayer shines. We'll write a private helper method that:
-1. Fetches a web page
-2. Asks an LLM to analyze it
-3. Returns a structured verdict
+This is where GenLayer earns its name. We're going to write a method that:
+
+1. Opens a web page from inside a smart contract
+2. Sends the content to an LLM for analysis
+3. Gets validator consensus on the AI's verdict
 
 ```python
     def _fact_check(self, claim_text: str, source_url: str) -> dict:
         def check_claim() -> str:
-            # Step 1: Fetch real data from the internet
+            # 1. Fetch real data from the internet
             web_data = gl.nondet.web.render(source_url, mode="text")
 
-            # Step 2: Ask the LLM to fact-check the claim against the source
+            # 2. Ask an LLM to analyze the claim against the source
             prompt = f"""You are a fact-checker. Based on the web content provided,
 determine whether the following claim is true, false, or partially true.
 
@@ -194,54 +188,52 @@ Rules:
             result = gl.nondet.exec_prompt(prompt, response_format="json")
             return json.dumps(result, sort_keys=True)
 
-        # Step 3: Use Equivalence Principle for consensus
+        # 3. Validators compare results using strict equality
         result_json = json.loads(gl.eq_principle.strict_eq(check_claim))
         return result_json
 ```
 
-**This is the heart of the tutorial. Let's unpack every line:**
+Let's break down the three key API calls:
 
-#### `gl.nondet.web.render(url, mode="text")`
+### `gl.nondet.web.render(url, mode="text")`
 
-This fetches a web page directly from within the smart contract. No oracles. No off-chain services. The contract reaches out to the internet itself.
+This fetches a web page *from inside the smart contract*. No oracles. No off-chain services. The contract itself reaches out to the internet.
 
-- `mode="text"` returns the page as plain text (HTML stripped)
-- `mode="html"` returns raw HTML
-- `mode="screenshot"` returns a screenshot image
+- `mode="text"` — returns the page as plain text (HTML stripped)
+- `mode="html"` — returns raw HTML
+- `mode="screenshot"` — returns a screenshot as an image
 
-> On Ethereum or Solana, this is **literally impossible**. Smart contracts are sandboxed with no network access. GenLayer contracts break this barrier at the protocol level.
+On Ethereum or Solana, this is **impossible**. Smart contracts are sandboxed with zero network access. GenLayer gives contracts first-class internet access.
 
-#### `gl.nondet.exec_prompt(prompt, response_format="json")`
+### `gl.nondet.exec_prompt(prompt, response_format="json")`
 
-This runs a prompt through an LLM, right inside the contract. The `response_format="json"` parameter tells the model to return structured JSON.
+This runs a prompt through an LLM, inside the contract. The `response_format="json"` parameter tells the model to return structured data (a Python dict).
 
-> Again — impossible on any other blockchain. There's no native AI integration anywhere else. GenLayer validators each have access to LLM providers, so AI is a first-class citizen.
+Again — impossible on any other blockchain. GenLayer validators each have access to LLM providers, making AI a native capability.
 
-#### `gl.eq_principle.strict_eq(check_claim)`
+### `gl.eq_principle.strict_eq(check_claim)`
 
-This is the **Equivalence Principle** in action. Here's exactly what happens:
+This is the Equivalence Principle in action. Here's exactly what happens when this line executes:
 
-1. The **Leader validator** runs the `check_claim` function — fetching the web page, calling the LLM, getting a result
-2. Each **other validator** independently runs the same function
-3. `strict_eq` checks if all validators got the **exact same JSON output**
-4. If they agree → consensus is reached, the result is accepted
-5. If they disagree → the transaction might be appealed
+1. The **Leader validator** calls `check_claim()` — fetching the web page, running the LLM, getting a result
+2. Each **other validator** independently calls `check_claim()` — doing the same work
+3. `strict_eq` compares all the results byte-for-byte
+4. If they match: consensus is reached, the result is accepted
+5. If they don't match: the transaction may be appealed
 
-We use `strict_eq` because our output is a structured verdict (`true`/`false`/`partially_true`). Since we ask the LLM to respond with a simple label from a small set, validators are very likely to agree.
+We use `strict_eq` because our output is constrained — a small JSON object with a verdict from a fixed set (`true`/`false`/`partially_true`). This makes agreement very likely even across different LLM calls.
 
-> **When would you use other equivalence types?**
-> - **`prompt_comparative`**: When outputs should be similar but not identical (e.g., two ratings within 0.1 of each other)
-> - **`prompt_non_comparative`**: When you want validators to judge if the leader's output meets certain criteria without redoing the work
+### Why Is `check_claim` a Nested Function?
 
-#### Why `check_claim` is a nested function
+Notice the pattern: we define `check_claim()` inside `_fact_check()` and pass it to `strict_eq()`. This is how GenLayer's non-deterministic execution works — the inner function is the "unit of consensus." Each validator runs it independently, and the equivalence principle compares their outputs.
 
-Notice the pattern: we define `check_claim()` as an inner function and pass it to `strict_eq`. This is how GenLayer's non-deterministic execution works — the function is executed by each validator independently, and the equivalence principle compares their outputs.
+Think of it as wrapping the non-deterministic work in a box, then asking all validators: "Did you get the same thing?"
 
 ---
 
-### Step 5: Resolve a Claim (Triggering the Fact-Check)
+## Step 5: Triggering the Fact-Check
 
-Now let's add the method that triggers the AI fact-check:
+Now let's expose a public method that triggers the AI analysis:
 
 ```python
     @gl.public.write
@@ -254,33 +246,33 @@ Now let's add the method that triggers the AI fact-check:
         if claim.has_been_checked:
             raise Exception("Claim already fact-checked")
 
-        # Run the AI fact-check (this is where the magic happens!)
+        # This is where the magic happens
         result = self._fact_check(claim.text, claim.source_url)
 
-        # Update the claim with the verdict
+        # Update the claim with the AI's verdict
         claim.verdict = result["verdict"]
         claim.explanation = result.get("explanation", "")
         claim.has_been_checked = True
 
-        # Award reputation to the submitter
+        # Award reputation to the claim submitter
         submitter_addr = Address(claim.submitter)
         if submitter_addr not in self.reputation:
             self.reputation[submitter_addr] = 0
         self.reputation[submitter_addr] += 1
 ```
 
-When someone calls `resolve_claim`:
+When anyone calls `resolve_claim`, the contract:
 
-1. We validate the claim exists and hasn't been checked yet
-2. We call `_fact_check()` which fetches the web, asks the AI, and gets validator consensus
-3. We update the claim with the verdict and explanation
-4. We award 1 reputation point to the submitter (for contributing a claim to the platform)
+1. Validates the claim exists and hasn't been checked yet
+2. Runs `_fact_check()` — the web fetch, LLM analysis, and validator consensus all happen here
+3. Stores the verdict and explanation on-chain
+4. Awards 1 reputation point to the original submitter
 
 ---
 
-### Step 6: Read Methods (View Functions)
+## Step 6: Reading Data
 
-Let's add the methods to read data from the contract:
+Finally, the view methods that let the frontend read contract state:
 
 ```python
     @gl.public.view
@@ -311,19 +303,18 @@ Let's add the methods to read data from the contract:
         return self.reputation.get(Address(user_address), 0)
 ```
 
-**View methods:**
-- Are **read-only** — they can't modify state
-- Are **free** — no gas cost to call
-- Are decorated with `@gl.public.view`
-- Return data to the frontend
+View methods are:
+- **Read-only** — they can't change state
+- **Free** — no gas cost
+- **Decorated** with `@gl.public.view`
 
-Note how `get_reputation` converts `Address` keys to hex strings using `.as_hex` — this is needed because the frontend works with string addresses.
+Note how `get_reputation` converts `Address` keys to hex strings with `.as_hex`. The frontend works with string addresses, so we do the conversion here.
 
 ---
 
-### The Complete Contract
+## The Complete Contract
 
-Here's the full `contracts/truth_post.py`:
+Here's the full `contracts/truth_post.py` — 95 lines of Python:
 
 ```python
 # { "Depends": "py-genlayer:test" }
@@ -449,53 +440,45 @@ Rules:
         return self.reputation.get(Address(user_address), 0)
 ```
 
-**That's 95 lines of Python — and it does something no Ethereum contract could ever do.**
+**95 lines. A smart contract that browses the internet and thinks about what it finds.**
 
 ---
 
-### How It All Flows
+## Tracing Through an Execution
 
-Let's trace through what happens when someone fact-checks a claim:
+Let's follow what happens when a user fact-checks a claim end to end:
 
 ```
 1. User calls submit_claim("The Eiffel Tower is 330m tall", "https://en.wikipedia.org/wiki/Eiffel_Tower")
-   → Claim stored with verdict="pending"
+   -> Claim stored on-chain with verdict="pending"
 
-2. User (or anyone) calls resolve_claim("claim_1")
-   → Contract calls _fact_check()
+2. Anyone calls resolve_claim("claim_1")
+   -> Contract enters _fact_check()
 
-3. Inside _fact_check():
-   a. Leader validator runs check_claim():
-      - Fetches Wikipedia page via gl.nondet.web.render()
-      - Sends content + claim to LLM via gl.nondet.exec_prompt()
-      - LLM returns: {"verdict": "true", "explanation": "The Eiffel Tower is 330m tall including its antenna"}
+3. Inside _fact_check(), the Leader validator runs check_claim():
+   a. gl.nondet.web.render() fetches the Wikipedia page
+   b. gl.nondet.exec_prompt() sends the content + claim to the LLM
+   c. LLM returns: {"verdict": "true", "explanation": "The Eiffel Tower is 330m tall including its antenna"}
 
-   b. Other validators independently do the same thing
+4. Other validators independently run check_claim()
+   -> They each fetch Wikipedia and query the LLM
 
-   c. gl.eq_principle.strict_eq() compares all results
-      - All validators got "true" → consensus reached!
+5. gl.eq_principle.strict_eq() compares all results
+   -> All validators returned {"verdict": "true", ...}
+   -> Consensus reached!
 
-4. Claim updated: verdict="true", has_been_checked=True
-5. Submitter gets +1 reputation point
+6. Claim updated: verdict="true", has_been_checked=True
+7. Submitter receives +1 reputation point
 ```
 
 ---
 
-### Deploy Your Contract
+## Deploy It
 
-Let's update the deployment script to deploy our TruthPost contract instead of the football bets one.
-
-Open `deploy/deployScript.ts` and change the contract file path:
+Update the deployment script to point to our contract. In `deploy/deployScript.ts`, change the file path:
 
 ```typescript
-import path from "path";
-import { GenLayerClient } from "genlayer-js";
-
-export default async function main(client: GenLayerClient<any>) {
-  // Change this line to point to our new contract
-  const contractFilePath = path.resolve("contracts/truth_post.py");
-  // ... rest stays the same
-}
+const filePath = path.resolve(process.cwd(), "contracts/truth_post.py");
 ```
 
 Then deploy:
@@ -504,42 +487,42 @@ Then deploy:
 npm run deploy
 ```
 
-Copy the deployed contract address — you'll need it for the frontend in Part 3.
+Copy the contract address — you'll need it for the frontend in Part 3.
 
 ---
 
-### Concepts Recap
+## Prompt Engineering for On-Chain AI
+
+Writing prompts for on-chain LLMs is different from chatting with ChatGPT. Your prompts need to produce **consistent, structured output** across multiple independent validators. Here are the rules:
+
+1. **Always request JSON.** Use `response_format="json"` and specify the exact schema.
+2. **Constrain the output space.** Don't ask for free-form text. Give the LLM a small set of valid labels: `true`, `false`, `partially_true`.
+3. **Be ruthlessly explicit about format.** "Respond ONLY with JSON, no extra text" prevents the LLM from adding commentary.
+4. **Sort your keys.** `json.dumps(result, sort_keys=True)` ensures key ordering is deterministic across validators.
+5. **Simpler is better.** Fewer output fields = higher chance all validators produce identical output = easier consensus.
+
+> **Bad:** "Tell me about this claim and whether you think it's true"
+>
+> **Good:** "Respond ONLY with JSON: {\"verdict\": \"<true|false>\", \"explanation\": \"<1 sentence>\"}"
+
+---
+
+## Concepts You've Learned
 
 | Concept | What It Does | Code |
 |---------|-------------|------|
-| **State variables** | Persistent on-chain storage | `claims: TreeMap[str, Claim]` |
-| **Custom storage types** | Store complex objects on-chain | `@allow_storage @dataclass class Claim` |
-| **Write methods** | Modify state (costs gas) | `@gl.public.write` |
-| **View methods** | Read state (free) | `@gl.public.view` |
-| **Web access** | Fetch data from the internet | `gl.nondet.web.render(url, mode="text")` |
-| **LLM calls** | Run AI prompts on-chain | `gl.nondet.exec_prompt(prompt, response_format="json")` |
-| **Equivalence Principle** | Validators agree on AI outputs | `gl.eq_principle.strict_eq(fn)` |
-| **Sender address** | Who called the method | `gl.message.sender_address` |
+| State variables | Persistent on-chain storage | `claims: TreeMap[str, Claim]` |
+| Custom storage types | Complex objects on-chain | `@allow_storage @dataclass class Claim` |
+| Write methods | Modify state, cost gas | `@gl.public.write` |
+| View methods | Read state, free | `@gl.public.view` |
+| Web access | Fetch internet data from a contract | `gl.nondet.web.render(url, mode="text")` |
+| LLM calls | Run AI prompts on-chain | `gl.nondet.exec_prompt(prompt, response_format="json")` |
+| Equivalence Principle | Validators agree on AI outputs | `gl.eq_principle.strict_eq(fn)` |
+| Sender address | Who called the method | `gl.message.sender_address` |
 
----
+In the next part, we'll build a React frontend that connects to this contract — submitting claims, triggering fact-checks, and displaying verdicts in real time.
 
-### Prompt Engineering Tips for Intelligent Contracts
-
-Writing prompts for on-chain LLMs is different from ChatGPT. Your prompts need to produce **consistent, structured output** that validators can agree on:
-
-1. **Always request JSON output** — Use `response_format="json"` and specify the exact schema in your prompt
-2. **Use constrained labels** — Instead of free-form answers, give the LLM specific options (`true`/`false`/`partially_true`)
-3. **Be explicit about format** — Add "Respond ONLY with JSON, no extra text" to prevent verbose responses
-4. **Sort keys** — Use `json.dumps(result, sort_keys=True)` so key ordering is deterministic
-5. **Keep it simple** — The simpler the output, the more likely validators will agree
-
-> **Bad prompt:** "Tell me about this claim and whether it's true"
->
-> **Good prompt:** "Respond ONLY with JSON: {\"verdict\": \"<true|false>\", \"explanation\": \"<1 sentence>\"}"
-
----
-
-**Next up: [Part 3 — Building the Frontend with Next.js & genlayer-js →](part3-frontend.md)**
+**Next up: [Part 3 — Building the Frontend with Next.js & genlayer-js](part3-frontend.md)**
 
 ---
 

@@ -1,144 +1,155 @@
-# Zero to GenLayer: Build a Decentralized Fact-Checker with AI
+# Zero to GenLayer: Build a Decentralized AI Fact-Checker from Scratch
 
-## Part 1 — What is GenLayer & Setting Up Your Environment
+## Part 1 — What Makes GenLayer Different (And How to Set Up Your Environment)
 
-*A 4-part hands-on tutorial where you build "TruthPost" — a dApp that uses AI to fact-check claims on-chain. No blockchain experience required.*
-
----
-
-### What You'll Build
-
-**TruthPost** is a decentralized fact-checking platform where:
-
-1. Anyone can submit a claim (e.g., *"The Eiffel Tower is 330 meters tall"*)
-2. The smart contract **fetches real sources from the internet** and uses **AI to verify** whether the claim is true, false, or partially true
-3. Multiple validators independently fact-check and reach **consensus** on the verdict
-4. Correct fact-checkers earn reputation points
-
-By the end of this tutorial series, you'll have a fully working dApp with a Python intelligent contract and a Next.js frontend — and you'll understand the revolutionary concepts that make GenLayer unlike any other blockchain.
+*This is Part 1 of a 4-part series where you'll build **TruthPost** — a decentralized app that uses AI to fact-check claims directly on-chain. No blockchain experience needed. If you can write basic Python and JavaScript, you're ready.*
 
 ---
 
-### Why GenLayer?
+Imagine a smart contract that can Google something.
 
-If you've worked with Ethereum, Solana, or any other blockchain, you know the limitations:
+Not through some third-party oracle. Not through an off-chain service you have to trust. The contract itself opens a browser, reads a web page, thinks about what it found, and writes a verdict to the blockchain.
 
-- **No internet access.** Smart contracts can't fetch data from the web. You need oracles — expensive, centralized middlemen.
-- **No AI reasoning.** Contracts can only do math and if/else logic. They can't understand language, parse web pages, or make judgment calls.
-- **Determinism is king.** Every node must produce the exact same output. This means smart contracts can never handle anything subjective.
+That's what we're going to build.
 
-**GenLayer breaks all three barriers.**
+**TruthPost** is a fact-checking platform where anyone can submit a claim — say, *"The Eiffel Tower is 330 meters tall"* — and the blockchain will:
 
-GenLayer is the first **AI-native blockchain** where smart contracts — called **Intelligent Contracts** — can:
+1. Fetch a real source from the internet (like Wikipedia)
+2. Send the content to an AI model for analysis
+3. Have multiple independent validators verify the AI's verdict
+4. Record the result on-chain — permanently, transparently, without trusting anyone
 
-- **Access the internet** directly (no oracles needed)
-- **Use LLMs** to reason about data, parse text, and make decisions
-- **Handle non-deterministic outputs** through a novel consensus mechanism
+By the end of this 4-part series, you'll have a complete working dApp: a Python smart contract doing things that are literally impossible on Ethereum, plus a React frontend with wallet integration.
 
-This isn't a layer on top of existing blockchains. It's a fundamentally new architecture where AI is embedded at the protocol level.
+Let's start with *why* this is possible at all.
 
 ---
 
-### The Two Big Ideas
+## The Problem With Every Other Blockchain
 
-Before we touch any code, you need to understand two concepts that make GenLayer work. Everything else builds on these.
+If you've touched Ethereum, Solana, or any other chain, you've hit the same walls:
 
-#### 1. Optimistic Democracy Consensus
+**Smart contracts can't see the outside world.** They can't make HTTP requests. They can't read a news article. If they need real-world data — a stock price, a sports score, today's weather — they depend on oracles. Oracles are expensive, slow, and introduce exactly the kind of trusted third party that blockchain was supposed to eliminate.
 
-On Ethereum, every validator runs the same code and must get the *exact same result*. That's why smart contracts can't use AI — two LLM calls never produce identical output.
+**Smart contracts can't think.** They execute deterministic logic: math, conditionals, state updates. They can't parse natural language, summarize a document, or decide whether a statement is true or false. They're calculators, not reasoners.
 
-GenLayer solves this with **Optimistic Democracy**:
+**Every validator must get the exact same result.** This is the deepest constraint. Blockchain consensus requires determinism — run the same code, get the same output. But AI models are inherently non-deterministic. Ask GPT the same question twice, you'll get two different answers. Traditional blockchains have no way to handle this.
 
-1. A transaction is submitted (e.g., "fact-check this claim")
-2. A randomly selected **Leader validator** processes it first — fetching web data, running AI, producing a result
-3. Other **validators** independently do the same work
-4. Validators don't check for *identical* results — they check for **equivalent** results (more on this below)
+GenLayer breaks all three of these barriers. Not with workarounds — at the protocol level.
+
+---
+
+## What is GenLayer?
+
+GenLayer is an **AI-native blockchain**. That phrase gets thrown around loosely in crypto, so let me be specific about what it means here.
+
+Smart contracts on GenLayer — called **Intelligent Contracts** — are Python classes that run inside a custom virtual machine called GenVM. Inside GenVM, contracts have native access to two things no other blockchain offers:
+
+- **The internet.** Contracts can fetch web pages, call APIs, take screenshots — directly, without oracles.
+- **Large Language Models.** Contracts can run prompts through AI models and get back structured responses.
+
+And GenLayer has a consensus mechanism specifically designed to handle the fact that AI outputs aren't deterministic.
+
+This isn't a layer-2 solution or a plugin. It's a new blockchain architecture built from the ground up for AI-powered applications.
+
+---
+
+## The Two Big Ideas
+
+Everything in GenLayer rests on two concepts. Once you understand these, the rest of the tutorial will click.
+
+### 1. Optimistic Democracy
+
+On Ethereum, consensus works by repetition: every validator runs the same code and checks that they all got the same answer. If you ask an LLM a question, that model breaks — two validators will get two different phrasings, and the chain rejects the transaction.
+
+GenLayer replaces this with **Optimistic Democracy**:
+
+1. A transaction comes in (e.g., "fact-check this claim")
+2. A randomly selected **Leader** processes it first — fetching web data, running the AI, producing a result
+3. A set of other **Validators** independently do the same work
+4. Validators don't compare for *identical* outputs. They compare for **equivalent** outputs
 5. If a majority agrees the results are equivalent, the transaction is **accepted**
-6. A **Finality Window** opens where anyone can appeal
-7. Appeals bring in more validators (doubling each round), creating escalating security
-8. Once appeals resolve, the transaction is **finalized** and irreversible
+6. A window opens where anyone can **appeal** the result
+7. Each appeal brings in more validators (the number doubles), creating escalating security
+8. Once appeals close (or none are filed), the result is **finalized** and permanent
 
-This is based on Condorcet's Jury Theorem — the "wisdom of the crowd." The more independent validators check a result, the more likely the consensus is correct.
+The key insight: GenLayer doesn't demand that every validator produces the string `"true"`. It demands that every validator *agrees the claim is true*. That's the difference between determinism and equivalence — and it's what makes AI on-chain possible.
 
-> **Key insight:** GenLayer doesn't require identical outputs. It requires *equivalent* outputs. This is what makes AI-powered contracts possible.
+> This is grounded in Condorcet's Jury Theorem — the mathematical principle that a majority of independent decision-makers is more likely to be correct than any individual. More validators = more confidence.
 
-#### 2. The Equivalence Principle
+### 2. The Equivalence Principle
 
-The Equivalence Principle is *how* validators decide if two different AI outputs are "close enough." As a developer, YOU define what "equivalent" means for your specific use case.
+If validators aren't checking for identical outputs, what *are* they checking? That's where the Equivalence Principle comes in. As a developer, **you** define what "equivalent" means for your use case.
 
-GenLayer provides three types:
+GenLayer gives you three options:
 
-| Type | When to Use | Example |
-|------|-------------|---------|
-| **Strict Equality** | Outputs must be identical | Hash comparisons, yes/no answers |
-| **Comparative** | Outputs should be similar (both leader & validator do the work) | "Ratings should be within 0.1 points" |
-| **Non-Comparative** | Only the leader's output is checked against criteria (validators don't redo work) | "Summary must be accurate and under 100 words" |
+| Type | What It Means | When to Use It |
+|------|--------------|----------------|
+| **Strict Equality** | Outputs must be byte-for-byte identical | Structured data: yes/no, categories, JSON with fixed keys |
+| **Comparative** | An LLM judges whether two outputs are "close enough" | Numeric ranges, similar-but-not-identical text |
+| **Non-Comparative** | An LLM checks whether the leader's output meets specified criteria | Subjective quality checks, summaries, creative outputs |
 
-In our TruthPost app, we'll use **strict equality** — because our AI returns a structured verdict (`true` / `false` / `partially_true`), and we want all validators to agree on the same label.
+For TruthPost, we'll use **strict equality**. Our AI returns a structured verdict — `"true"`, `"false"`, or `"partially_true"` — and we want every validator to land on the same label. Because the output space is small and constrained, strict equality works perfectly.
 
-> **Think of it this way:** Traditional blockchain = "Did everyone get 42?" GenLayer = "Did everyone agree this claim is false?"
+> **Mental model:** Traditional blockchain consensus asks "Did everyone compute 42?" GenLayer consensus asks "Does everyone agree this claim is false?" Same security guarantee, radically more flexibility.
 
 ---
 
-### Prerequisites
+## What You'll Need
 
-You'll need:
+Before we set up the project, make sure you have:
 
-- **Python 3.11+** — for writing intelligent contracts
+- **Python 3.11+** — for writing the intelligent contract
 - **Node.js 18+** — for the frontend and deployment tools
-- **Git** — for cloning the boilerplate
-- **A modern browser with MetaMask** — for interacting with the dApp
-- **GenLayer Studio** — the development environment (we'll set this up below)
+- **Git** — for cloning the starter project
+- **MetaMask** browser extension — for connecting your wallet to the dApp
+- **GenLayer Studio** — the development environment (we'll set it up in a moment)
 
-No prior blockchain, Solidity, or Web3 experience required. If you know basic Python and JavaScript/TypeScript, you're good.
-
----
-
-### Step 1: Set Up GenLayer Studio
-
-GenLayer Studio is your development environment. It runs a local GenLayer network with validators, so you can deploy and test contracts.
-
-You have two options:
-
-**Option A: Use the hosted Studio (Recommended for beginners)**
-
-Go to [https://studio.genlayer.com](https://studio.genlayer.com) — it's ready to use, no installation needed.
-
-**Option B: Run Studio locally**
-
-Follow the instructions at [https://docs.genlayer.com](https://docs.genlayer.com) to install GenLayer Studio on your machine.
+You don't need any blockchain experience. No Solidity, no Rust, no prior Web3 knowledge. If you're comfortable with Python and TypeScript/JavaScript, you're ready.
 
 ---
+
+## Setting Up Your Environment
+
+### Step 1: GenLayer Studio
+
+GenLayer Studio is your local development environment. It spins up a GenLayer network with validators so you can deploy and test contracts.
+
+**Option A (recommended): Use the hosted version**
+
+Head to [studio.genlayer.com](https://studio.genlayer.com). It works out of the box — no installation, no Docker, no configuration.
+
+**Option B: Run it locally**
+
+Follow the setup instructions at [docs.genlayer.com](https://docs.genlayer.com).
 
 ### Step 2: Install the GenLayer CLI
 
-The GenLayer CLI (`genlayer`) is used to select networks and deploy contracts.
+The CLI handles network selection and contract deployment.
 
 ```bash
 npm install -g genlayer
 ```
 
-Verify the installation:
+Verify it installed:
 
 ```bash
 genlayer --version
 ```
 
----
+### Step 3: Clone the Boilerplate
 
-### Step 3: Clone and Set Up the Boilerplate
-
-We'll fork the official GenLayer boilerplate so we don't start from scratch. It includes a working project structure, deployment scripts, and a Next.js frontend template.
+We'll use the official GenLayer project boilerplate as our starting point. It includes a working project structure, deployment scripts, and a complete Next.js frontend template.
 
 ```bash
 git clone https://github.com/genlayerlabs/genlayer-project-boilerplate.git truthpost
 cd truthpost
 ```
 
-Install dependencies:
+Install everything:
 
 ```bash
-# Root project dependencies (deployment tools)
+# Root dependencies (deployment tools)
 npm install
 
 # Frontend dependencies
@@ -146,38 +157,34 @@ cd frontend
 npm install
 cd ..
 
-# Python dependencies (for testing)
+# Python dependencies (for contract testing)
 pip install -r requirements.txt
 ```
 
----
+### Step 4: Pick Your Network
 
-### Step 4: Select Your Network
+GenLayer supports three networks:
 
-GenLayer has three networks:
-
-| Network | Use Case | RPC URL |
-|---------|----------|---------|
+| Network | What It's For | RPC URL |
+|---------|--------------|---------|
 | **studionet** | Development with hosted Studio | `https://studio.genlayer.com/api` |
-| **localnet** | Local Studio instance | `http://localhost:8545` |
-| **testnet** | Public testnet (Asimov) | Provided by GenLayer |
+| **localnet** | Your own local Studio instance | `http://localhost:8545` |
+| **testnet (Asimov)** | Public testnet | Provided by GenLayer |
 
-For this tutorial, we'll use **studionet**:
+For this tutorial, use **studionet**:
 
 ```bash
 genlayer network
 # Select "studionet" from the menu
 ```
 
----
+### Step 5: Understand What You're Working With
 
-### Step 5: Understand the Project Structure
-
-Take a look at what the boilerplate gives us:
+Here's the boilerplate structure:
 
 ```
 truthpost/
-├── contracts/           # Python intelligent contracts (we'll write ours here)
+├── contracts/           # Python intelligent contracts (our code goes here)
 │   └── football_bets.py # Example contract (we'll replace this)
 ├── frontend/            # Next.js 15 app
 │   ├── app/             # Pages and layouts
@@ -191,56 +198,58 @@ truthpost/
 └── requirements.txt     # Python dependencies
 ```
 
-The boilerplate comes with a football betting dApp. In Parts 2 and 3, we'll replace the contract and adapt the frontend for our TruthPost fact-checker.
+The boilerplate ships with a football betting dApp as an example. Over the next two parts, we'll replace the contract and adapt the frontend into TruthPost.
 
----
+### Step 6: Sanity Check
 
-### Step 6: Quick Sanity Check
-
-Let's verify everything is working by deploying the example contract:
+Let's make sure everything works by deploying the example contract:
 
 ```bash
 npm run deploy
 ```
 
-You should see output like:
+You should see:
 
 ```
 Deploying contract...
 Contract deployed at address: 0x...
 ```
 
-If you see a contract address, your environment is set up correctly!
+If you see a contract address, you're good to go.
 
-> **Troubleshooting:**
-> - If deployment fails, make sure GenLayer Studio is running (or you're connected to studionet)
-> - Check that `genlayer network` is set to the right network
-> - Ensure `npm install` completed successfully at the root level
+> **If deployment fails:**
+> - Make sure GenLayer Studio is running (or you're connected to studionet)
+> - Double-check `genlayer network` is set correctly
+> - Verify `npm install` completed at the root level
 
 ---
 
-### What's Coming Next
+## The Road Ahead
 
-Now that your environment is ready, here's the roadmap:
+Here's what we'll cover across the full series:
 
-| Part | What You'll Learn |
+| Part | What You'll Build |
 |------|-------------------|
-| **Part 1** (this one) | What GenLayer is, Optimistic Democracy, Equivalence Principle, environment setup |
-| **Part 2** | Writing the TruthPost intelligent contract in Python — web access, LLM calls, storage |
-| **Part 3** | Building the frontend with Next.js, genlayer-js, and MetaMask wallet integration |
-| **Part 4** | Testing, deployment to testnet, and what to build next |
+| **Part 1** (you are here) | GenLayer concepts, environment setup, project structure |
+| **Part 2** | The TruthPost intelligent contract — web access, LLM calls, consensus |
+| **Part 3** | React frontend with genlayer-js, MetaMask, and TanStack Query |
+| **Part 4** | Testing with gltest, testnet deployment, and ideas for what's next |
 
 ---
 
-### Key Takeaways
+## Key Takeaways
 
-- GenLayer is an **AI-native blockchain** where contracts can access the internet and use LLMs
-- **Optimistic Democracy** lets validators reach consensus on non-deterministic outputs through equivalence checking, not exact matching
-- The **Equivalence Principle** is how developers define what "close enough" means for AI outputs
-- **Intelligent Contracts** are written in Python, not Solidity — making them accessible to millions more developers
+Let's recap what makes GenLayer different from every other blockchain:
+
+- **Intelligent Contracts** are written in Python, not Solidity — if you know Python, you can build on GenLayer
+- Contracts can **access the internet** and **call AI models** natively — no oracles, no off-chain services
+- **Optimistic Democracy** allows validators to reach consensus on non-deterministic outputs — the breakthrough that makes AI on-chain possible
+- The **Equivalence Principle** lets you define what "agreement" means for your specific use case — strict matching, similarity comparison, or criteria-based evaluation
 - The GenLayer ecosystem includes **Studio** (dev environment), **CLI** (deployment), and **genlayer-js** (frontend SDK)
 
-**Next up: [Part 2 — Writing Your First Intelligent Contract →](part2-intelligent-contract.md)**
+In the next part, we'll write a Python smart contract that does something no Ethereum contract could ever do: fetch a web page, ask an AI to analyze it, and record the verdict on-chain.
+
+**Next up: [Part 2 — Writing Your First Intelligent Contract](part2-intelligent-contract.md)**
 
 ---
 
